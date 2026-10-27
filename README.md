@@ -1,15 +1,30 @@
-# HP ENVY x360 Convertible (13-ar0xxx) Linux Master Enablement Suite
+# HP ENVY x360 Convertible 13-ar0xxx (13-ar0000 Series) Linux Master Enablement Suite
 
 [![OS](https://img.shields.io/badge/OS-Fedora%20Linux%2043-blue?logo=fedora)](https://getfedora.org/)
 [![Kernel](https://img.shields.io/badge/Kernel-Linux%207.2+-green?logo=linux)](https://kernel.org/)
 [![Desktop](https://img.shields.io/badge/DE-GNOME%2049%20Wayland-purple?logo=gnome)](https://gnome.org/)
-[![Processor](https://img.shields.io/badge/CPU-AMD%20Ryzen%205%203500U-red?logo=amd)](https://www.amd.com/)
+[![Processor](https://img.shields.io/badge/CPU-AMD%20Ryzen%205%203500U%20%2F%203700U-red?logo=amd)](https://www.amd.com/)
 [![Firmware](https://img.shields.io/badge/BIOS-AMI%20F.30-orange)](https://support.hp.com/)
 [![License](https://img.shields.io/badge/License-MIT-brightgreen.svg)](LICENSE)
 
-A battle-tested, software-engineering-grade hardware enablement suite and complete post-install playbook for running modern Linux (Fedora 43 Workstation, GNOME Wayland) on the **HP ENVY x360 Convertible 13-ar0xxx** (AMD Ryzen 5 3500U with Radeon Vega 8 Mobile Graphics).
+A battle-tested, software-engineering-grade hardware enablement suite and complete post-install playbook for running modern Linux (Fedora 43 Workstation, GNOME Wayland) on the **HP ENVY x360 Convertible 13-ar0xxx** / **13-ar0000 Series** (AMD Ryzen 5 3500U / Ryzen 7 3700U with Radeon Vega Mobile Graphics).
 
 This repository completely resolves all out-of-the-box hardware issues—transforming an unsupported, thermal-throttling, battery-draining convertible laptop into a rock-solid, responsive daily driver with full biometric fingerprint authentication, silky-smooth 1080p60 video playback, intelligent tablet mode, and safe cold S4 hibernation.
+
+---
+
+## Supported Models & Hardware Identification
+
+This repository is engineered specifically for the **HP ENVY x360 13-ar series** (AMD Picasso APU platform). Search engines, DMI, and system profilers identify this platform under the following identifiers:
+
+* **DMI Product Name**: `HP ENVY x360 Convertible 13-ar0xxx`
+* **Model Families**: HP ENVY x360 13-ar0000 series, 13-ar0xxx, 13-ar0013dx, 13-ar0001la, 13-ar0003ng, 13-ar0002ng, 13-ar0501sa, 6SQ55EA#UUW (Nordic)
+* **Motherboard / Baseboard ID**: `85DE 41.36` (HP system board 85DE)
+* **BIOS Version**: AMI BIOS `F.30` (and `F.10`–`F.29` revisions)
+* **Processors Supported**: AMD Ryzen 5 3500U, AMD Ryzen 7 3700U, AMD Ryzen 3 3300U (Raven/Picasso architecture)
+* **Graphics**: AMD Radeon Vega 8 / Vega 10 Mobile Graphics (`1002:15d8` rev c2)
+* **Fingerprint Sensor**: Synaptics Tudor Match-in-Sensor USB `06cb:00c9`
+* **Sensor Fusion**: AMD Sensor Fusion Hub (SFH) MP2 `1022:15e4`
 
 ---
 
@@ -56,8 +71,8 @@ When installing Fedora Workstation, create a **Swapfile or Swap Partition of at 
 Open a terminal and run:
 
 ```bash
-git clone https://github.com/Dorten8/hp-envy-x360-linux.git
-cd hp-envy-x360-linux
+git clone https://github.com/Dorten8/hp-envy-x360-13-ar0xxx-linux.git
+cd hp-envy-x360-13-ar0xxx-linux
 sudo ./install.sh
 ```
 
@@ -107,7 +122,7 @@ For detailed engineering analysis, root causes, kernel logs, and forensic breakd
 ## Repository Structure & Manifest
 
 ```text
-hp-envy-x360-linux/
+hp-envy-x360-13-ar0xxx-linux/
 ├── README.md                                          <- Master architectural documentation & guide
 ├── LICENSE                                            <- MIT License
 ├── install.sh                                         <- 1-command root setup orchestrator
