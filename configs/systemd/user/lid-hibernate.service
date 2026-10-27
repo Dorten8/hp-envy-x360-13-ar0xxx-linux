@@ -1,0 +1,15 @@
+[Unit]
+Description=Lid Close Hibernate Daemon (Fixes s2idle Battery Drain on HP ENVY x360)
+Documentation=file:///home/dorten_hp_envy/TROUBLESHOOTING.md
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/dorten_hp_envy/scripts/lid-hibernate-daemon.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,18 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs
+*.log
+logs/
+
+# Temporary / editor files
+*~
+*.swp
+*.swo
+.DS_Store
+
+# Coredumps & binaries
+*.zst
+core.*

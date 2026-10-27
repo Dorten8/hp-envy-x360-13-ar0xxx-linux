@@ -1,0 +1,15 @@
+[Unit]
+Description=HP ENVY x360 Tablet Mode & Auto-Rotation Daemon (AMD SFH hidraw bypass)
+Documentation=file:///home/dorten_hp_envy/TROUBLESHOOTING.md
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/dorten_hp_envy/scripts/tablet-rotation-daemon.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

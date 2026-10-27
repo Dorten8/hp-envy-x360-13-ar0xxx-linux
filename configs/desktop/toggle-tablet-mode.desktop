@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Toggle Tablet Mode
+Comment=Toggle HP ENVY x360 Tablet Mode (Lock/Unlock physical keyboard & touchpad, toggle OSK)
+Exec=/home/dorten_hp_envy/scripts/toggle-tablet-mode.sh
+Icon=input-tablet
+Terminal=false
+Type=Application
+Categories=Utility;Settings;

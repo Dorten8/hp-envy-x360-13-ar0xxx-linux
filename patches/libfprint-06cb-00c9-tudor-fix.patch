@@ -1,0 +1,144 @@
+diff --git a/libfprint/drivers/synatlsmoc/synatlsmoc.c b/libfprint/drivers/synatlsmoc/synatlsmoc.c
+index c38f4a4..4aff5e9 100644
+--- a/libfprint/drivers/synatlsmoc/synatlsmoc.c
++++ b/libfprint/drivers/synatlsmoc/synatlsmoc.c
+@@ -491,8 +491,8 @@ synatlsmoc_cmd_receive_cb (FpiUsbTransfer *transfer,
+         {
+           fpi_ssm_mark_failed (transfer->ssm,
+                                set_and_report_error (FP_DEVICE_ERROR_PROTO,
+-                                                     "Command failed with status: %s",
+-                                                     status_to_str (status)));
++                                                     "Command failed with status: 0x%04x (%s)",
++                                                     status, status_to_str (status)));
+           return;
+         }
+     }
+@@ -907,6 +907,8 @@ send_tls_data (FpiDeviceSynaTlsMoc *self, guint8 *tdata, gsize tdata_size)
+ 
+ /* VCSFW_CMD_FRAME_ACQ ===================================================== */
+ 
++static void send_frame_acquire (FpiDeviceSynaTlsMoc *self, guint8 capture_flags);
++
+ static void
+ recv_frame_acquire (FpDevice *device, guint8 *buffer_in, gsize length_in, GError *error)
+ {
+@@ -924,46 +926,54 @@ recv_frame_acquire (FpDevice *device, guint8 *buffer_in, gsize length_in, GError
+     {
+       fpi_ssm_next_state (self->task_ssm);
+     }
+-  else if (status == RESPONSE_PROCESSING_FRAME)
++  else if (status == RESPONSE_PROCESSING_FRAME ||
++           status == UNKNOWN_RESPONSE_ON_WHICH_SEND_AGAIN ||
++           status == VCS_RESULT_SENSOR_FRAME_NOT_READY)
+     {
+       gint *retry_idx;
++      guint8 capture_flags;
+       if (fpi_device_get_current_action (device) == FPI_DEVICE_ACTION_ENROLL)
+         {
+           EnrollData *enroll_ssm_data = fpi_ssm_get_data (self->task_ssm);
+           retry_idx = &enroll_ssm_data->frame_acquire_retry_idx;
++          capture_flags = CAPTURE_FLAG_ENROLL;
+         }
+-      else if (fpi_device_get_current_action (device) == FPI_DEVICE_ACTION_VERIFY)
++      else if (fpi_device_get_current_action (device) == FPI_DEVICE_ACTION_VERIFY ||
++               fpi_device_get_current_action (device) == FPI_DEVICE_ACTION_IDENTIFY)
+         {
+           IdentifyVerifyData *identify_verify_ssm_data =
+               fpi_ssm_get_data (self->task_ssm);
+           retry_idx = &identify_verify_ssm_data->frame_acquire_retry_idx;
++          capture_flags = CAPTURE_FLAG_AUTH;
+         }
+       else
+         {
+           g_assert_not_reached ();
+         }
+ 
+-      if (retry_idx > 0)
++      if (*retry_idx > 0)
+         {
+           *retry_idx -= 1;
+-          fp_dbg ("Received processing frame; current / max retries: %d/%d ....",
+-                  *retry_idx, FRAME_ACQUIRE_NUM_RETRIES);
+-          fpi_ssm_jump_to_state (self->task_ssm, ENROLL_SEND_FRAME_ACQUIRE);
++          fp_dbg ("Received 0x%04x (%s) on frame_acquire; retrying (%d/%d left)...",
++                  status, status_to_str (status), *retry_idx, FRAME_ACQUIRE_NUM_RETRIES);
++          g_usleep (50000);
++          send_frame_acquire (self, capture_flags);
+         }
+       else
+         {
+           fpi_ssm_mark_failed (
+               self->task_ssm,
+               set_and_report_error (FP_DEVICE_ERROR_PROTO,
+-                                    "Frame acquire max retries reached"));
++                                    "Frame acquire max retries reached (last status: 0x%04x)",
++                                    status));
+         }
+     }
+   else
+     {
+       fpi_ssm_mark_failed (self->task_ssm,
+                            set_and_report_error (FP_DEVICE_ERROR_PROTO,
+-                                                 "Command failed with status: %s",
+-                                                 status_to_str (status)));
++                                                 "Frame acquire failed with status: 0x%04x (%s)",
++                                                 status, status_to_str (status)));
+     }
+ }
+ 
+@@ -1004,7 +1014,7 @@ send_frame_acquire (FpiDeviceSynaTlsMoc *self, guint8 capture_flags)
+ 
+   /* Do not check the response status as there is a status on which we
+    * should send the command again */
+-  synatlsmoc_exec_cmd (self, FALSE, TRUE, cmd, send_size, expected_recv_size,
++  synatlsmoc_exec_cmd (self, FALSE, FALSE, cmd, send_size, expected_recv_size,
+                        recv_frame_acquire);
+ }
+ 
+@@ -1195,7 +1205,7 @@ recv_event_read (FpDevice *device, guint8 *buffer_in, gsize length_in, GError *e
+               self->num_pending_events);
+       send_event_read (self);
+     }
+-  else if (self->event_recv == self->event_mask)
++  else if ((self->event_recv & self->event_mask) == self->event_mask)
+     {
+       fpi_ssm_next_state (self->task_ssm);
+     }
+@@ -3890,8 +3900,9 @@ synatlsmoc_enroll (FpDevice *device)
+ 
+   fpi_device_get_enroll_data (device, &data->print);
+ 
+-  gchar *fp_user_id = fpi_print_generate_user_id (data->print);
+-  memcpy (data->fp_user_id, fp_user_id, sizeof (FpUserId));
++  g_autofree gchar *fp_user_id = fpi_print_generate_user_id (data->print);
++  memset (data->fp_user_id, 0, sizeof (FpUserId));
++  g_strlcpy (data->fp_user_id, fp_user_id, sizeof (FpUserId));
+ 
+   data->finger_id = fp_print_get_finger (data->print);
+ 
+diff --git a/libfprint/drivers/synatlsmoc/synatlsmoc.h b/libfprint/drivers/synatlsmoc/synatlsmoc.h
+index 27e89f5..8d3a078 100644
+--- a/libfprint/drivers/synatlsmoc/synatlsmoc.h
++++ b/libfprint/drivers/synatlsmoc/synatlsmoc.h
+@@ -61,7 +61,7 @@ G_DECLARE_FINAL_TYPE (FpiDeviceSynaTlsMoc, fpi_device_synatlsmoc, FPI, DEVICE_SY
+ #define WINBIO_SID_SIZE 76
+ #define DB2_ID_SIZE 16
+ 
+-#define FRAME_ACQUIRE_NUM_RETRIES 3
++#define FRAME_ACQUIRE_NUM_RETRIES 10
+ 
+ #define IMAGE_QUALITY_THRESHOLD 50
+ 
+@@ -212,11 +212,7 @@ enum ENROLL_SUBCMDS
+ 
+ enum CAPTURE_FLAGS
+ {
+-  /* WARN: Here we deviate from the reverse-engineered driver,
+-      as PID 0x00D8 requires the AUTH flag to be 15, while it seems
+-      to work on other devices too. */
+-  /* CAPTURE_FLAG_AUTH = 7, */
+-  CAPTURE_FLAG_AUTH = 15,
++  CAPTURE_FLAG_AUTH = 7,
+   CAPTURE_FLAG_ENROLL = 15,
+ };
+ 
