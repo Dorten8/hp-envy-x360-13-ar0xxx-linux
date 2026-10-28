@@ -248,10 +248,17 @@ sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$USER_UID" systemctl --user rest
 
 # ------------------------------------------------------------------------------
 # 9. Persistent Nordic / US-International Keyboard Layout (AltGr Shortcuts)
+#    & User Session Power Policy (Never Sleep on AC)
 # ------------------------------------------------------------------------------
-echo "[*] 9. Preserving US-International layout with AltGr dead keys (Danish/Nordic)..."
+echo "[*] 9. Preserving US-International layout & user session power policy..."
 localectl set-x11-keymap us pc105 altgr-intl 2>/dev/null || true
 sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$USER_UID" gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'us+altgr-intl')]" 2>/dev/null || true
+
+# Explicitly ensure user desktop session never sleeps or turns off when on AC power
+sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$USER_UID" gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing' 2>/dev/null || true
+sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$USER_UID" gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-timeout 0 2>/dev/null || true
+sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$USER_UID" gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'hibernate' 2>/dev/null || true
+sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$USER_UID" gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout 1800 2>/dev/null || true
 
 CURRENT_MASK=$(cat /sys/module/amd_sfh/parameters/sensor_mask 2>/dev/null || echo "N/A")
 
