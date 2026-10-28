@@ -31,8 +31,14 @@ echo "============================================================"
 
 # ------------------------------------------------------------------------------
 # 1. Systemd Logind & Sleep Configuration
+#    - Force TRUE S4 Hibernation everywhere.
+#    - Explicitly disable s2idle suspend (AllowSuspend=no, AllowSuspendThenHibernate=no)
+#      to prevent the 15-minute GDM idle suspend and 60-second AMD SP5100 TCO
+#      hardware watchdog reboot loop.
+#    - Mask systemd-suspend.service and systemd-hybrid-sleep.service.
+#    - Configure GDM and local dconf to never trigger idle suspend.
 # ------------------------------------------------------------------------------
-echo "[*] 1. Configuring systemd-logind & systemd-sleep for Hibernation..."
+echo "[*] 1. Configuring systemd-logind, systemd-sleep & GDM for Pure Hibernation..."
 mkdir -p /etc/systemd/logind.conf.d
 cat << 'EOF' > /etc/systemd/logind.conf.d/lid-hibernate.conf
 [Login]
@@ -46,9 +52,10 @@ EOF
 mkdir -p /etc/systemd/sleep.conf.d
 cat << 'EOF' > /etc/systemd/sleep.conf.d/hibernate.conf
 [Sleep]
+AllowSuspend=no
 AllowHibernation=yes
-AllowSuspendThenHibernate=yes
-AllowHybridSleep=yes
+AllowSuspendThenHibernate=no
+AllowHybridSleep=no
 HibernateMode=shutdown platform
 EOF
 
@@ -57,6 +64,31 @@ cat << 'EOF' > /etc/systemd/system.conf.d/fast-shutdown.conf
 [Manager]
 DefaultTimeoutStopSec=15s
 EOF
+
+# Mask dangerous suspend services
+systemctl mask systemd-suspend.service systemd-hybrid-sleep.service 2>/dev/null || true
+
+# Configure GDM and system dconf to prevent login screen idle suspend
+mkdir -p /etc/dconf/db/gdm.d /etc/dconf/db/local.d
+cat << 'EOF' > /etc/dconf/db/gdm.d/01-power
+[org/gnome/settings-daemon/plugins/power]
+sleep-inactive-ac-timeout=0
+sleep-inactive-ac-type='nothing'
+sleep-inactive-battery-timeout=1800
+sleep-inactive-battery-type='hibernate'
+EOF
+
+cat << 'EOF' > /etc/dconf/db/local.d/01-power
+[org/gnome/settings-daemon/plugins/power]
+sleep-inactive-ac-timeout=0
+sleep-inactive-ac-type='nothing'
+sleep-inactive-battery-timeout=1800
+sleep-inactive-battery-type='hibernate'
+power-button-action='hibernate'
+EOF
+
+dconf update 2>/dev/null || true
+systemctl kill -s HUP systemd-logind 2>/dev/null || true
 
 # ------------------------------------------------------------------------------
 # 2. Fast Hibernate Image Size & Post-Resume EC Polling System Sleep Hook

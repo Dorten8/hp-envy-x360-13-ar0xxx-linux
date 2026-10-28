@@ -32,7 +32,7 @@ This repository is engineered specifically for the **HP ENVY x360 13-ar series**
 
 | Subsystem / Problem | Out-of-the-Box Linux Behavior | Our Engineering Solution | Status |
 | :--- | :--- | :--- | :---: |
-| **Power Management & Backpack Boiling** | Laptop stays boiling hot in bags, draining from 100% to 0% in ~4 hours. Modern Standby (`s2idle`) is broken on Linux Zen+, and HP BIOS `F.30` completely lacks an ACPI S3 wake vector. S4 hibernation aborts with AMDGPU TTM eviction `error -12`. | Configured **True Fast S4 Hibernation by default**, pre-sleep memory compaction (`drop_caches=3`, `compact_memory=1`) leaving >3.6 GB free for GPU buffer eviction, target 2.0 GB image size, post-resume EC polling, boil-guard watchdog with 2-failure emergency poweroff cutoff, and 60s AMD SP5100 hardware watchdog timer. | **100% Solved** |
+| **Power Management & Backpack Boiling** | Laptop stays boiling hot in bags, draining from 100% to 0% in ~4 hours. Modern Standby (`s2idle`) is broken on Linux Zen+, and HP BIOS `F.30` completely lacks an ACPI S3 wake vector. S4 hibernation aborts with AMDGPU TTM eviction `error -12`. GDM login screen idles into s2idle, causing 60-second hardware watchdog reboot loops. | Configured **True Fast S4 Hibernation by default**, eradicated s2idle system-wide (`AllowSuspend=no`, masked suspend services, GDM dconf suppression), pre-sleep memory compaction (`drop_caches=3`, `compact_memory=1`) leaving >3.6 GB free for GPU buffer eviction, target 2.0 GB image size, post-resume EC polling, boil-guard watchdog with 2-failure emergency poweroff cutoff, and 60s AMD SP5100 hardware watchdog timer. | **100% Solved** |
 | **Synaptics Fingerprint (`06cb:00c9`)** | Zero upstream Linux kernel/libfprint support. Community reverse-engineered drivers fail enrollment after 3 taps due to 4 critical code bugs (auth flag collision, pointer comparison, logic inversion, missing persistent pairing write). | Patched `libfprint` and `fprintd` trees, resolved all 4 driver bugs, automated PAM integration with `authselect`, and version-locked packages in DNF to prevent update overwrites. | **100% Solved** |
 | **Tablet Mode & Auto-Rotation** | Display auto-rotation locks up during boot due to AMD SFH MP2 co-processor mailbox contention (`sensor_mask=-1`). The laptop has no physical hinge sensor. Naive heuristics lock the keyboard while typing in clamshell mode. | Fixed kernel module with `amd_sfh.sensor_mask=1`. Decoupled architecture: G-sensor strictly handles display auto-rotation in Mutter/Wayland; user-controlled 1-tap Dash icon and `<Super>F12` shortcut handle physical input locking. Smart dynamic seat monitor suppresses On-Screen Keyboard on `sudo` prompts. | **100% Solved** |
 | **Video Hardware Acceleration & YouTube Stutter** | Rhythmic micro-stuttering and frame drops during YouTube/HTML5 video playback on Vega 8 due to missing patent-encumbered codecs in Fedora and buggy hardware VP9 decoding in the Mesa VA-API driver. High CPU load (75%) and continuous fan noise. | Installed Mesa freeworld VA-API drivers from RPM Fusion, configured Firefox overrides (`media.mediasource.vp9.enabled=false`, `media.ffmpeg.vaapi=true`, `media.hardware-video-decoding.force-enabled=true`) to force silky-smooth H.264/HEVC hardware decoding. CPU load drops to 8–12%. | **100% Solved** |
@@ -105,7 +105,7 @@ Run our automated diagnostics tool:
 For detailed engineering analysis, root causes, kernel logs, and forensic breakdowns, consult our technical deep-dive documentation:
 
 1. **[Power Management & S4 Hibernation](docs/01-power-and-hibernation.md)**  
-   *BIOS F.30 missing S3 analysis, Modern Standby drain, AMDGPU TTM buffer eviction failure (`error -12`), target image size memory starvation, boil-guard watchdog, and AMD SP5100 TCO hardware watchdog.*
+   *BIOS F.30 missing S3 analysis, Modern Standby drain, AMDGPU TTM buffer eviction failure (`error -12`), target image size memory starvation, boil-guard watchdog, GDM 15-minute idle suspend loop resolution, and AMD SP5100 TCO hardware watchdog.*
 2. **[Synaptics Tudor Fingerprint Driver (`06cb:00c9`)](docs/02-fingerprint-06cb-00c9.md)**  
    *Hardware TLS architecture, the 4 driver code bugs uncovered (auth flag collision, pointer comparison, logic inversion, missing persistent pairing write), patches, build instructions, and DNF version locking.*
 3. **[Tablet Mode, Auto-Rotation & Smart OSK](docs/03-tablet-rotation-and-smart-osk.md)**  
@@ -140,13 +140,16 @@ hp-envy-x360-13-ar0xxx-linux/
 │   │   ├── hp-envy-tablet.conf                        <- options amd_sfh sensor_mask=1, blacklist acer_wmi
 │   │   ├── iwlwifi.conf                               <- options iwlwifi power_save=1
 │   │   └── audio_powersave.conf                       <- options snd_hda_intel power_save=1
+│   ├── dconf/
+│   │   ├── gdm-01-power                               <- GDM login screen idle suspend suppression
+│   │   └── local-01-power                             <- System-wide idle hibernation & power button
 │   ├── sysctl.d/
 │   │   └── 99-zram-tweaks.conf                        <- vm.swappiness=100, vm.page-cluster=0
 │   ├── systemd/
 │   │   ├── logind.conf.d/
 │   │   │   └── lid-hibernate.conf                     <- HandleLidSwitch=hibernate
 │   │   ├── sleep.conf.d/
-│   │   │   └── hibernate.conf                         <- AllowHibernation=yes, HibernateMode=shutdown platform
+│   │   │   └── hibernate.conf                         <- AllowSuspend=no, AllowHibernation=yes
 │   │   ├── system.conf.d/
 │   │   │   ├── fast-shutdown.conf                     <- DefaultTimeoutStopSec=15s
 │   │   │   └── watchdog.conf                          <- RuntimeWatchdogSec=60s (AMD SP5100 TCO)

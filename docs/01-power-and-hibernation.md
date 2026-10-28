@@ -81,6 +81,50 @@ sequenceDiagram
 
 ---
 
+## 2.2 Forensic Post-Mortem: The 15-Minute GDM Idle Suspend & 60-Second Hardware Watchdog Reboot Loop
+
+Following deployment of the initial fixes, the laptop exhibited a cyclic reboot symptom: while sitting unattended at the login screen, the machine spontaneously rebooted every ~15 minutes (specifically at 08:59, 09:15, 09:32, 09:48, 10:04, 10:21, 10:37).
+
+### Root-Cause Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor GDM as GDM Greeter (Login Screen)
+    participant Logind as systemd-logind
+    participant Kernel as Linux Kernel / AMD APU
+    participant Watchdog as AMD SP5100 TCO Hardware Watchdog
+    participant Hardware as Motherboard Reset Circuit
+
+    Note over GDM: Machine sits idle at login screen for 15 minutes (900s).
+    GDM->>Logind: Calls D-Bus Suspend()
+    Logind->>Kernel: Triggers systemd-suspend.service (s2idle)
+    Kernel->>Kernel: Freezes user space & enters s2idle
+    Note over Kernel: systemd PID 1 is now FROZEN.<br/>Nobody is pinging /dev/watchdog!
+    Note over Watchdog: AMD SP5100 TCO hardware timer<br/>continues ticking in S0ix hardware...<br/>RuntimeWatchdogSec=60s counts down to 0!
+    Watchdog->>Hardware: Hardware watchdog underflow -> Hard CPU Reset!
+    Hardware->>GDM: Laptop cold reboots to GDM login screen
+    Note over GDM: 15 minutes elapse -> GDM suspends again -> Watchdog resets -> Loop repeats!
+```
+
+### Forensic Log Analysis
+
+Inspection of `journalctl --list-boots` and `journalctl -b -1` revealed the precise timing:
+```text
+Oct 28 10:53:02 fedora systemd-logind[992]: The system will suspend now!
+Oct 28 10:53:04 fedora kernel: PM: suspend entry (s2idle)
+-- Reboot -- (Boot 0 starts at 10:54:04 CET - exactly 60 seconds after s2idle!)
+```
+
+1. **Why GDM suspended**: GNOME Display Manager runs under an unprivileged `gdm-greeter` session whose default dconf profile issues a `Suspend()` call after 900 seconds of inactivity on AC or battery.
+2. **Why the hardware watchdog reset the APU**: Systemd's `RuntimeWatchdogSec=60s` configures the hardware AMD SP5100 TCO timer. In true S4 hibernation, the motherboard is powered off (0W), halting all hardware counters. But in `s2idle` Modern Standby, the motherboard remains energized while userspace is completely frozen. Since PID 1 is asleep and unable to ping `/dev/watchdog`, the hardware watchdog fires precisely 60 seconds after suspend entry, triggering a hard reboot.
+3. **The Solution**: Completely eradicate `s2idle` from the operating system:
+   - Configure `AllowSuspend=no`, `AllowSuspendThenHibernate=no`, and `AllowHybridSleep=no` in `sleep.conf.d`.
+   - Mask `systemd-suspend.service` and `systemd-hybrid-sleep.service`.
+   - Override GDM and system dconf profiles (`/etc/dconf/db/gdm.d/01-power`) to disable login screen AC suspend (`sleep-inactive-ac-type='nothing'`) and route battery inactivity to true hibernation (`sleep-inactive-battery-type='hibernate'`).
+
+---
+
 ## 3. The Complete Engineering Solution
 
 We established a 4-layer defense system that guarantees fast, 100% reliable hibernation with cold 0W battery draw and failsafe hardware protections.
@@ -102,10 +146,25 @@ HandleLidSwitchDocked=ignore
 File: `/etc/systemd/sleep.conf.d/hibernate.conf`
 ```ini
 [Sleep]
+AllowSuspend=no
 AllowHibernation=yes
-AllowSuspendThenHibernate=yes
-AllowHybridSleep=yes
+AllowSuspendThenHibernate=no
+AllowHybridSleep=no
 HibernateMode=shutdown platform
+```
+
+Mask dangerous suspend units so they cannot be triggered by user space or external triggers:
+```bash
+sudo systemctl mask systemd-suspend.service systemd-hybrid-sleep.service
+```
+
+File: `/etc/dconf/db/gdm.d/01-power` (Suppresses GDM 15-minute idle suspend on login screen)
+```ini
+[org/gnome/settings-daemon/plugins/power]
+sleep-inactive-ac-timeout=0
+sleep-inactive-ac-type='nothing'
+sleep-inactive-battery-timeout=1800
+sleep-inactive-battery-type='hibernate'
 ```
 
 ### Layer 2: Pre-Sleep Memory Compaction & Safe 2.0 GB Image Size
